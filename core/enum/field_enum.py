@@ -24,7 +24,7 @@ class FieldEnumerator:
         
     async def enumerate_fields(self) -> Dict[str, Any]:
         """Comprehensive field enumeration using multiple techniques"""
-        print("🔍 Enumerating GraphQL fields and operations...")
+        print("Enumerating GraphQL fields and operations...")
         
         async with aiohttp.ClientSession() as session:
             self.session = session
