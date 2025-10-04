@@ -27,8 +27,8 @@ class GraphQLCrackEngine:
         self.banner = """
         ╔══════════════════════════════════════════════════════════════╗
         ║                   GRAPHQL CRACK ENGINE                       ║
-        ║      Advanced GraphQL Security Assessment Toolkit            ║
-        ║               Educational & Authorized Use Only              ║
+        ║             GraphQL Security Assessment Toolkit              ║
+        ║                   Authorized Use Only                        ║
         ╚══════════════════════════════════════════════════════════════╝
         """
         
