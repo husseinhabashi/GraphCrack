@@ -1,0 +1,15 @@
+/graphql
+/api/graphql
+/gql
+/query
+/api
+/v1/graphql
+/v2/graphql
+/graphql-api
+/graphql/console
+/admin/graphql
+/internal/graphql
+/api/v1/graphql
+/api/v2/graphql
+/graphql/v1
+/graphql/v2

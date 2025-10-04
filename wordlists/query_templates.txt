@@ -1,0 +1,31 @@
+# Common GraphQL Query Templates for Testing
+
+# Basic introspection
+query { __schema { types { name } } }
+query { __type(name: "User") { name fields { name } } }
+
+# User-related queries
+query { users { id name email } }
+query { user(id: 1) { id username email role } }
+query { me { id name email permissions } }
+query { currentUser { id profile { avatar bio } } }
+
+# Admin queries  
+query { admin { users { id email } } }
+query { allUsers { id name email createdAt } }
+query { systemSettings { key value } }
+
+# Data queries
+query { posts { id title content author { name } } }
+query { products { id name price category { name } } }
+query { orders { id total customer { email } } }
+
+# Authentication testing
+query { loginHistory { ip address userAgent } }
+query { sessions { id user { email } createdAt } }
+
+# Mutation templates
+mutation { createUser(input: {email: "test@test.com", password: "test"}) { id } }
+mutation { login(input: {email: "admin@admin.com", password: "admin"}) { token } }
+mutation { updateUser(id: 1, input: {role: "admin"}) { id role } }
+mutation { deleteUser(id: 1) { success } }
