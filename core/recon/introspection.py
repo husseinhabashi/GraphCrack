@@ -121,7 +121,7 @@ class IntrospectionAnalyzer:
             print(f"Introspection failed: {e}")
             
         return None
-    
+
     def analyze_schema(self, introspection_data):
         """Analyze introspection data for security issues"""
         analysis = {
@@ -132,39 +132,60 @@ class IntrospectionAnalyzer:
             'risky_directives': []
         }
         
-        if not introspection_data or '__schema' not in introspection_data:
-            return analysis
-            
-        schema = introspection_data['__schema']
-        types = schema.get('types', [])
-        
-        for type_info in types:
-            type_name = type_info.get('name', '')
-            fields = type_info.get('fields', [])
-            
-            # Analyze queries and mutations
-            for field in fields:
-                field_name = field.get('name', '')
-                field_desc = field.get('description', '').lower()
+        try:
+            # Handle None or empty data
+            if not introspection_data or '__schema' not in introspection_data:
+                return analysis
                 
-                # Look for sensitive operations
-                if self.is_sensitive_field(field_name, field_desc):
-                    analysis['sensitive_queries'].append({
-                        'type': type_name,
-                        'field': field_name,
-                        'description': field_desc
-                    })
+            schema = introspection_data['__schema']
+            types = schema.get('types', [])
+            
+            if not isinstance(types, list):
+                return analysis
+            
+            for type_info in types:
+                if not isinstance(type_info, dict):
+                    continue
+                    
+                type_name = type_info.get('name', '')
+                fields = type_info.get('fields', [])
                 
-                # Look for authentication-related fields
-                if self.is_auth_field(field_name, field_desc):
-                    analysis['authentication_flows'].append({
-                        'type': type_name,
-                        'field': field_name,
-                        'description': field_desc
-                    })
+                if not isinstance(fields, list):
+                    continue
+                
+                # Analyze queries and mutations
+                for field in fields:
+                    if not isinstance(field, dict):
+                        continue
+                        
+                    field_name = field.get('name', '')
+                    field_desc = field.get('description', '')
+                    if field_desc:
+                        field_desc = field_desc.lower()
+                    else:
+                        field_desc = ''  # Empty string instead of None
+                    
+                    # Look for sensitive operations
+                    if self.is_sensitive_field(field_name, field_desc):
+                        analysis['sensitive_queries'].append({
+                            'type': type_name,
+                            'field': field_name,
+                            'description': field_desc
+                        })
+                    
+                    # Look for authentication-related fields
+                    if self.is_auth_field(field_name, field_desc):
+                        analysis['authentication_flows'].append({
+                            'type': type_name,
+                            'field': field_name,
+                            'description': field_desc
+                        })
+        except Exception as e:
+            # If any error occurs, return the empty analysis
+            print(f"Schema analysis error: {e}")
         
         return analysis
-    
+
     def is_sensitive_field(self, field_name, description):
         """Check if field is sensitive"""
         sensitive_keywords = [
@@ -174,14 +195,18 @@ class IntrospectionAnalyzer:
             'email', 'phone', 'address', 'ssn', 'credit'
         ]
         
+        # Handle None values
+        if not field_name:
+            return False
+            
         field_lower = field_name.lower()
-        desc_lower = description.lower()
+        desc_lower = description.lower() if description else ''
         
         for keyword in sensitive_keywords:
             if keyword in field_lower or keyword in desc_lower:
                 return True
         return False
-    
+
     def is_auth_field(self, field_name, description):
         """Check if field is authentication-related"""
         auth_keywords = [
@@ -189,8 +214,12 @@ class IntrospectionAnalyzer:
             'session', 'signin', 'signup', 'register', 'oauth'
         ]
         
+        # Handle None values
+        if not field_name:
+            return False
+            
         field_lower = field_name.lower()
-        desc_lower = description.lower()
+        desc_lower = description.lower() if description else ''
         
         for keyword in auth_keywords:
             if keyword in field_lower or keyword in desc_lower:
