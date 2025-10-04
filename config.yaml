@@ -1,0 +1,22 @@
+# GraphQL Crack Engine Configuration
+security:
+  max_requests_per_minute: 60
+  request_timeout: 30
+  user_agent: "GraphQL-Crack-Engine/1.0"
+  legal_warning: true
+
+assessment:
+  default_threads: 4
+  max_threads: 10
+  timeout: 300
+  depth_limit: 5
+
+wordlists:
+  jwt_secrets: "wordlists/jwt_secrets.txt"
+  graphql_paths: "wordlists/graphql_paths.txt"
+  common_queries: "wordlists/query_templates.txt"
+
+reporting:
+  generate_html: true
+  generate_json: true
+  output_dir: "reports/"

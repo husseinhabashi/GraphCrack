@@ -1,0 +1,7 @@
+aiohttp==3.8.5
+PyJWT==2.8.0
+cryptography==41.0.7
+asyncio==3.4.3
+pyyaml==6.0.1
+requests==2.31.0
+colorama==0.4.6
