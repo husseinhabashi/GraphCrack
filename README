@@ -1,4 +1,159 @@
-troubleshooting:
+GraphQL Crack Engine
+
+GraphCrack is an advanced GraphQL Security Assessment Toolkit designed for professional penetration testers and researchers.
+It automates reconnaissance, schema enumeration, JWT brute-forcing, and vulnerability scoring — producing both human-readable HTML and machine-parseable JSON reports.
+
+⸻⸻⸻⸻⸻⸻⸻⸻
+
+Overview
+
+GraphCrack is built for comprehensive GraphQL attack surface mapping.
+It combines discovery, introspection analysis, schema fuzzing, and JWT analysis to identify weaknesses such as:
+	-	Exposed introspection queries
+	-	Sensitive operations and fields
+	-	Weak or guessable JWT secrets
+	-	Misconfigured authentication or bypasses
+	-	Schema disclosure through error-based or wordlist enumeration
+
+⸻⸻⸻⸻⸻⸻⸻⸻
+
+Features
+	-	Asynchronous, fast endpoint testing and schema discovery
+	-	JWT token brute-forcing with custom wordlists
+	-	Enumeration engine that works even when introspection is blocked
+	-	Integrated risk scoring system (0–100) with weighted severity and exploitability
+	-	HTML + JSON report generation
+	-	Supports custom headers, timeouts, and threading
+	-	Works cross-platform (Linux, macOS, Windows, Codespaces)
+
+⸻⸻⸻⸻⸻⸻⸻⸻
+
+Installation
+    - git clone https://github.com/yourusername/GraphCrack.git
+    - cd GraphCrack
+    - pip install -r requirements.txt
+
+⸻⸻⸻⸻⸻⸻⸻⸻
+
+Basic Commands
+
+# Full assessment (discovery + auth + enumeration)
+python graphql_crack.py -u "https://api.target.com/graphql" -m full -o reports/target_report.html
+
+# JWT brute-force only
+python graphql_crack.py -u "https://api.target.com/graphql" -m auth \
+  --jwt-token "eyJhbGciOi..." \
+  --wordlist wordlists/jwt_secrets.txt \
+  -o reports/jwt_report.html
+
+# Schema enumeration only (useful when introspection is disabled)
+python graphql_crack.py -u "https://api.target.com/graphql" -m enum -o reports/schema_enum.html
+
+# Quick recon (endpoint discovery and introspection check)
+python graphql_crack.py -u "https://api.target.com/graphql" -m recon
+
+Important Notes
+	-	-o requires a file path (e.g., -o reports/output.html).
+	-	If -o is omitted, GraphCrack skips HTML generation but still writes a timestamped JSON report (e.g., graphql_crack_results.20251014T191200Z.json).
+	-	--headers accepts a JSON string for custom headers, such as:
+      --headers '{"Authorization": "Bearer <token>", "User-Agent": "GraphQL-Crack/1.0"}'
+
+⸻⸻⸻⸻⸻⸻⸻⸻
+
+Mode
+    - recon
+        - Discovers GraphQL endpoints and checks for introspection access
+    - auth
+        - Performs JWT secret brute-forcing, authentication discovery, and bypass testing.
+    - enum
+        - Enumerates the GraphQL schema via introspection, error-based, and wordlist techniques.
+    -full
+        - Executes all phases sequentially (recommended for comprehensive scans).
+
+⸻⸻⸻⸻⸻⸻⸻⸻
+
+Risk Formula
+    - risk_score = clamp( round(base * exploitability * exposure * confidence_factor), 0, 100 )
+    - base
+        - Baseline severity by type
+        - CRITICAL = 90, HIGH = 70, MEDIUM = 40, LOW = 15, INFO = 5
+    - exploitability
+        - How easily the issue can be exploited
+        - trivial = 1.2, easy = 0.95, moderate = 0.7, hard = 0.45
+    - exposure
+        - How exposed the issue is
+        - public = 1.5, authenticated = 1.0, internal = 0.7
+    - confidence_factor
+        - Detection certainty
+        - 0.2 – 1.0 (default ≈ 0.7)
+
+⸻⸻⸻⸻⸻⸻⸻⸻
+
+Output
+
+GraphCrack produces:
+	-	HTML Report: A structured, color-coded report viewable in browsers and printed to the terminal.
+	-	JSON Report: Machine-readable version of the results, saved alongside the HTML file.
+	-	Raw JSON Results: Always saved with a timestamp even if no output path is specified.
+
+⸻⸻⸻⸻⸻⸻⸻⸻
+
+Examples
+
+JWT Secret Recovered:
+base=90 (CRITICAL)
+exploitability=1.2
+exposure=1.5
+confidence=0.95
+=> score ≈ 154 → 100 (CRITICAL)
+
+Introspection Enabled
+base=70 (HIGH)
+exploitability=0.7
+exposure=1.5
+confidence=0.8
+=> score ≈ 59 (MEDIUM)
+
+User Email Field Disclosure
+base=40 (MEDIUM)
+exploitability=0.95
+exposure=1.5
+confidence=0.8
+=> score ≈ 46 (MEDIUM)
+
+⸻⸻⸻⸻⸻⸻⸻⸻
+
+Report Contents
+
+Each HTML/JSON report contains:
+	-	Metadata: Target, mode, timestamps, config, headers.
+	-	Findings: Introspection access, sensitive schema elements.
+	-	Vulnerabilities: Ranked and scored weaknesses.
+	-	Risk Scores: Per-finding numeric value and label.
+	-	Aggregate Risk Score: Overall risk of the assessed target.
+
+⸻⸻⸻⸻⸻⸻⸻⸻
+
+Modifying or Tuning the Risk Engine
+
+Edit utils/risk.py to adjust how scoring works.
+	-	Modify SEVERITY_BASE to change baseline severity weights.
+	-	Adjust EXPLOITABILITY_MAP and EXPOSURE_MAP multipliers.
+	-	Modify the confidence defaults to calibrate how aggressively scoring reacts to uncertain detections.
+	-	The scoring logic is deterministic, easy to audit, and consistent across runs.
+
+⸻⸻⸻⸻⸻⸻⸻⸻
+
+Troubleshooting
+
+	-	error: argument -o/--output: expected one argument
+             You must specify a path: -o reports/output.html
+	-	circular import
+            Ensure utils/report_generator.py does not import the main engine. It should remain self-contained.
+	-	DeprecationWarning: datetime.utcnow()
+            Fixed in newer versions: GraphCrack now uses datetime.now(timezone.utc) for all timestamps.
+	-	aiohttp timeout or SSL error
+        Use --timeout to adjust request timeouts or test over HTTP for non-production endpoints.
 
 cat > requirements.txt << 'EOF'
 aiohttp>=3.8.0,<4.0.0
