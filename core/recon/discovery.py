@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-GraphQL Endpoint Discovery Module
+Advanced GraphQL Endpoint Discovery
 """
 
 import aiohttp
@@ -10,85 +10,117 @@ import json
 import re
 
 class GraphQLDiscoverer:
-    def __init__(self, base_url):
-        self.base_url = base_url
+    def __init__(self, base_url, wordlist=None, concurrency=20, verbose=True):
+        self.base_url = base_url.rstrip('/')
         self.session = None
+        self.verbose = verbose
+        self.semaphore = asyncio.Semaphore(concurrency)
+        
+        # Core + extended common paths
         self.common_paths = [
-            '/graphql', '/api/graphql', '/gql', '/query',
-            '/api', '/v1/graphql', '/v2/graphql',
-            '/graphql-api', '/graphql/console',
-            '/admin/graphql', '/internal/graphql'
+            '/graphql', '/api/graphql', '/gql', '/query', '/graphql/query',
+            '/api', '/v1/graphql', '/v2/graphql', '/graphql-api', '/graphql/console',
+            '/admin/graphql', '/internal/graphql', '/backend/graphql', '/core/graphql',
+            '/public/graphql', '/private/graphql', '/graph', '/graphql/endpoint',
+            '/graphql/playground', '/graphql/explorer', '/graphql-service'
         ]
-        
+
+        # Add extra wordlist if provided
+        if wordlist:
+            with open(wordlist) as f:
+                self.common_paths.extend([line.strip() for line in f if line.strip()])
+
     async def discover_endpoints(self):
-        """Discover GraphQL endpoints"""
         endpoints = []
-        
         async with aiohttp.ClientSession() as session:
             self.session = session
             
-            # Test common paths
-            tasks = []
-            for path in self.common_paths:
-                url = urljoin(self.base_url, path)
-                tasks.append(self.test_graphql_endpoint(url))
+            # Optional: grab hints from robots.txt, sitemap, and homepage
+            hinted_paths = await self.scan_for_hints()
+            all_paths = list(set(self.common_paths + hinted_paths))
             
+            tasks = [self.test_graphql_endpoint(urljoin(self.base_url, path)) for path in all_paths]
             results = await asyncio.gather(*tasks, return_exceptions=True)
             
-            for url, is_graphql in zip([urljoin(self.base_url, p) for p in self.common_paths], results):
-                if is_graphql and not isinstance(is_graphql, Exception):
+            for url, is_graphql in zip([urljoin(self.base_url, p) for p in all_paths], results):
+                if is_graphql:
                     endpoints.append(url)
-        
+                    if self.verbose:
+                        print(f"[+] GraphQL endpoint found: {url}")
+
         return endpoints
-    
+
     async def test_graphql_endpoint(self, url):
-        """Test if URL is a GraphQL endpoint"""
-        try:
-            # Test with introspection query
-            introspection_query = {
-                "query": "query { __schema { types { name } } }"
-            }
-            
-            async with self.session.post(url, json=introspection_query, timeout=10) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    # Check for GraphQL response patterns
-                    if self.is_graphql_response(data):
-                        return True
-                
-            # Test with invalid query to check for GraphQL error format
-            invalid_query = {
-                "query": "query { invalidField }"
-            }
-            
-            async with self.session.post(url, json=invalid_query, timeout=10) as response:
-                if response.status == 400:
-                    data = await response.json()
-                    if self.is_graphql_error(data):
-                        return True
+        async with self.semaphore:
+            try:
+                headers = {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "X-Requested-With": "XMLHttpRequest"
+                }
+
+                test_queries = [
+                    {"query": "query { __typename }"},  # lightweight
+                    {"query": "query { __schema { types { name } } }"},  # introspection
+                    {"query": "query { invalidField }"}  # error test
+                ]
+
+                for payload in test_queries:
+                    async with self.session.post(url, json=payload, headers=headers, timeout=8) as response:
+                        text = await response.text()
+                        content_type = response.headers.get("Content-Type", "")
                         
-        except Exception:
-            return False
-            
+                        # Try parse JSON if possible
+                        try:
+                            data = json.loads(text)
+                        except json.JSONDecodeError:
+                            data = {}
+
+                        # GraphQL indicators
+                        if self.is_graphql_response(data) or self.is_graphql_like(text, content_type):
+                            if self.verbose:
+                                print(f"    └─ [Detected GraphQL at {url}] ({response.status})")
+                            return True
+            except Exception:
+                return False
         return False
-    
+
     def is_graphql_response(self, data):
-        """Check if response is GraphQL format"""
         if isinstance(data, dict):
-            # Check for GraphQL success response
-            if 'data' in data and isinstance(data['data'], dict):
-                return True
-            # Check for GraphQL error response
-            if 'errors' in data and isinstance(data['errors'], list):
+            if 'data' in data or 'errors' in data:
                 return True
         return False
-    
-    def is_graphql_error(self, data):
-        """Check if error is GraphQL format"""
-        if isinstance(data, dict) and 'errors' in data:
-            errors = data['errors']
-            if isinstance(errors, list) and len(errors) > 0:
-                error = errors[0]
-                if isinstance(error, dict) and 'message' in error:
-                    return True
+
+    def is_graphql_like(self, text, content_type):
+        # Looser detection when introspection is disabled
+        graphql_keywords = ['Cannot query field', 'GraphQL', '__schema', 'syntax error', 'must be a query root']
+        if any(k.lower() in text.lower() for k in graphql_keywords):
+            return True
+        if 'application/json' in content_type and re.search(r'"errors":\s*\[', text):
+            return True
         return False
+
+    async def scan_for_hints(self):
+        """Scrape homepage, robots.txt, sitemap.xml for GraphQL clues"""
+        hinted_paths = []
+        potential_files = ['', '/robots.txt', '/sitemap.xml']
+        async with aiohttp.ClientSession() as session:
+            for path in potential_files:
+                url = urljoin(self.base_url, path)
+                try:
+                    async with session.get(url, timeout=5) as resp:
+                        text = await resp.text()
+                        found = re.findall(r'(\/[a-zA-Z0-9_\-\/]*graphql[a-zA-Z0-9_\-\/]*)', text)
+                        hinted_paths.extend(found)
+                except:
+                    continue
+        return hinted_paths
+
+# Example usage
+if __name__ == "__main__":
+    target = "https://example.com"
+    discoverer = GraphQLDiscoverer(target, concurrency=30, verbose=True)
+    endpoints = asyncio.run(discoverer.discover_endpoints())
+    print("\n[✓] Discovered endpoints:")
+    for ep in endpoints:
+        print("   →", ep)

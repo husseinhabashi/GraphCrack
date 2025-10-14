@@ -1,169 +1,144 @@
 #!/usr/bin/env python3
 """
-Report Generator for GraphQL Security Assessment
+Report Generator for GraphQL Crack Engine
+Generates color-coded HTML + JSON reports with risk scoring summary
+and also outputs the HTML directly to the terminal.
 """
 
 import json
-import os
-from datetime import datetime
+from pathlib import Path
+from typing import Dict, Any
+from datetime import datetime, timezone
+
 
 class ReportGenerator:
-    def __init__(self, assessment_data):
-        self.data = assessment_data
-    
-    def generate_html_report(self, output_file=None):
-        """Generate HTML assessment report"""
-        if not output_file:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_file = f"graphql_assessment_{timestamp}.html"
-        
-        html_content = self._generate_html_content()
-        
-        with open(output_file, 'w') as f:
-            f.write(html_content)
-        
-        return output_file
-    
-    def _generate_html_content(self):
-        """Generate HTML content"""
-        return f"""
-<!DOCTYPE html>
+    def __init__(self, results: Dict[str, Any]):
+        self.results = results
+        self.results["meta"]["finished_at"] = datetime.now(timezone.utc).isoformat()
+
+    def generate_html_report(self, outfile: str) -> str:
+        out_path = Path(outfile)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Save JSON report
+        json_path = out_path.with_suffix(".json")
+        with open(json_path, "w", encoding="utf-8") as jf:
+            json.dump(self.results, jf, indent=2, ensure_ascii=False)
+        print(f"[+] Raw JSON report saved: {json_path}")
+
+        meta = self.results.get("meta", {})
+        vulns = self.results.get("vulnerabilities", [])
+        findings = self.results.get("findings", [])
+        risk_score = meta.get("risk_score", 0)
+        risk_label = meta.get("risk_label", "N/A")
+
+        html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GraphQL Security Assessment Report</title>
-    <style>
-        body {{ font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }}
-        .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-        .header {{ background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 30px; border-radius: 8px; margin-bottom: 30px; }}
-        .section {{ margin-bottom: 30px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }}
-        .vulnerability {{ background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 10px 0; }}
-        .critical {{ background: #f8d7da; border-left: 4px solid #dc3545; }}
-        .high {{ background: #ffeaa7; border-left: 4px solid #f39c12; }}
-        .success {{ color: #28a745; }}
-        .danger {{ color: #dc3545; }}
-        .warning {{ color: #ffc107; }}
-        pre {{ background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }}
-    </style>
+<meta charset="utf-8">
+<title>GraphQL Crack Report – {meta.get('target','Unknown Target')}</title>
+<style>
+body {{
+  font-family: monospace;
+  background: #0d1117;
+  color: #e6edf3;
+  padding: 30px;
+}}
+h1, h2, h3 {{
+  color: #58a6ff;
+}}
+pre {{
+  background: #161b22;
+  padding: 10px;
+  border-radius: 6px;
+  overflow-x: auto;
+}}
+.card {{
+  background: #161b22;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  border-left: 5px solid #30363d;
+}}
+.severity-critical {{ border-color: #f85149; }}
+.severity-high {{ border-color: #d29922; }}
+.severity-medium {{ border-color: #58a6ff; }}
+.severity-low {{ border-color: #3fb950; }}
+.severity-info {{ border-color: #8b949e; }}
+.risk-summary {{
+  background: #161b22;
+  border-left: 5px solid #58a6ff;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+}}
+.risk-critical {{ color: #f85149; }}
+.risk-high {{ color: #d29922; }}
+.risk-medium {{ color: #58a6ff; }}
+.risk-low {{ color: #3fb950; }}
+.risk-info {{ color: #8b949e; }}
+</style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🔐 GraphQL Security Assessment Report</h1>
-            <p>Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
-            <p>Target: {self.data.get('target', 'N/A')}</p>
-        </div>
-        
-        {self._generate_summary_section()}
-        {self._generate_vulnerabilities_section()}
-        {self._generate_findings_section()}
-        {self._generate_technical_details()}
-        {self._generate_legal_notice()}
-    </div>
+
+<h1>GraphQL Crack Report</h1>
+<p><b>Target:</b> {meta.get('target','N/A')}<br>
+<b>Mode:</b> {meta.get('mode','N/A')}<br>
+<b>Started:</b> {meta.get('started_at','N/A')}<br>
+<b>Finished:</b> {meta.get('finished_at','N/A')}</p>
+
+<div class="risk-summary">
+  <b>Overall Risk Score:</b> {risk_score}/100<br>
+  <b>Overall Risk Level:</b> <span class="risk-{risk_label.lower()}">{risk_label}</span><br>
+  <b>Total Vulnerabilities:</b> {len(vulns)}<br>
+  <b>Total Findings:</b> {len(findings)}
+</div>
+
+<h2>Vulnerabilities</h2>
+{"".join(self._render_vuln(v) for v in vulns) or "<p>No vulnerabilities found.</p>"}
+
+<h2>Findings</h2>
+{"".join(self._render_finding(f) for f in findings) or "<p>No findings available.</p>"}
+
+<h2>Raw JSON Results</h2>
+<pre>{json.dumps(self.results, indent=2, ensure_ascii=False)}</pre>
+
 </body>
 </html>
-        """
-    
-    def _generate_summary_section(self):
-        """Generate summary section"""
-        vuln_count = len(self.data.get('vulnerabilities', []))
-        findings_count = len(self.data.get('findings', []))
-        
+"""
+
+        # Write HTML file
+        with open(out_path, "w", encoding="utf-8") as hf:
+            hf.write(html)
+
+        # Output the HTML to the terminal (preview)
+        print("\n" + "─" * 80)
+        print(f"[+] HTML report generated: {out_path}")
+        print("─" * 80)
+        print(html)
+        print("─" * 80)
+        print(f"[*] End of HTML output preview for: {out_path}\n")
+
+        return str(out_path)
+
+    def _render_vuln(self, v: Dict[str, Any]) -> str:
+        sev = str(v.get("risk_label") or v.get("severity", "info")).lower()
         return f"""
-        <div class="section">
-            <h2>📊 Executive Summary</h2>
-            <p><strong>Assessment Mode:</strong> {self.data.get('mode', 'N/A')}</p>
-            <p><strong>Vulnerabilities Found:</strong> <span class="{'danger' if vuln_count > 0 else 'success'}">{vuln_count}</span></p>
-            <p><strong>Security Findings:</strong> {findings_count}</p>
-            <p><strong>Assessment Date:</strong> {datetime.now().strftime("%Y-%m-%d")}</p>
-        </div>
-        """
-    
-    def _generate_vulnerabilities_section(self):
-        """Generate vulnerabilities section"""
-        vulnerabilities = self.data.get('vulnerabilities', [])
-        
-        if not vulnerabilities:
-            return """
-            <div class="section">
-                <h2>No Critical Vulnerabilities Found</h2>
-                <p>No critical security vulnerabilities were identified during this assessment.</p>
-            </div>
-            """
-        
-        vuln_html = ""
-        for vuln in vulnerabilities:
-            severity_class = vuln.get('severity', '').lower()
-            vuln_html += f"""
-            <div class="vulnerability {severity_class}">
-                <h3>{vuln.get('type', 'Unknown')}</h3>
-                <p><strong>Severity:</strong> {vuln.get('severity', 'Unknown')}</p>
-                <p><strong>Description:</strong> {vuln.get('description', 'N/A')}</p>
-                <p><strong>Impact:</strong> {vuln.get('impact', 'N/A')}</p>
-            </div>
-            """
-        
+<div class="card severity-{sev}">
+  <b>{v.get('type','unknown')}</b><br>
+  {v.get('description','')}<br>
+  <small>
+    Severity: {v.get('severity','N/A')} |
+    Risk Score: {v.get('risk_score',0)} |
+    Label: {v.get('risk_label','N/A')} |
+    Exploitability: {v.get('exploitability','N/A')} |
+    Exposure: {v.get('exposure','N/A')}
+  </small>
+</div>"""
+
+    def _render_finding(self, f: Dict[str, Any]) -> str:
         return f"""
-        <div class="section">
-            <h2>Security Vulnerabilities</h2>
-            {vuln_html}
-        </div>
-        """
-    
-    def _generate_findings_section(self):
-        """Generate findings section"""
-        findings = self.data.get('findings', [])
-        
-        if not findings:
-            return ""
-        
-        findings_html = ""
-        for finding in findings:
-            findings_html += f"""
-            <div class="vulnerability">
-                <h3>{finding.get('type', 'Unknown')}</h3>
-                <p><strong>Endpoint:</strong> {finding.get('endpoint', 'N/A')}</p>
-                <p><strong>Description:</strong> {finding.get('description', 'N/A')}</p>
-            </div>
-            """
-        
-        return f"""
-        <div class="section">
-            <h2>🔍 Security Findings</h2>
-            {findings_html}
-        </div>
-        """
-    
-    def _generate_technical_details(self):
-        """Generate technical details section"""
-        technical_data = {
-            'Discovered Endpoints': self.data.get('discovered_endpoints', []),
-            'JWT Analysis': self.data.get('jwt_analysis', {}),
-            'Schema Analysis': self.data.get('schema_analysis', {})
-        }
-        
-        technical_html = ""
-        for key, value in technical_data.items():
-            technical_html += f"""
-            <h3>{key}</h3>
-            <pre>{json.dumps(value, indent=2)}</pre>
-            """
-        
-        return f"""
-        <div class="section">
-            <h2>Technical Details</h2>
-            {technical_html}
-        </div>
-        """
-    
-    def _generate_legal_notice(self):
-        """Generate legal notice"""
-        return """
-        <div class="section" style="background: #f8f9fa; border: 1px solid #dee2e6;">
-            <h2>Legal Notice</h2>
-            <p><strong>Educational Use Only:</strong> This report is generated for educational purposes and authorized security testing.</p>
-            <p><strong>Authorization Required:</strong> Unauthorized testing is illegal and unethical.</p>
-            <p><strong>Responsible Disclosure:</strong> Any vulnerabilities found should be responsibly disclosed to the appropriate parties.</p>
-        </div>
-        """
+<div class="card">
+  <b>{f.get('type','unknown')}</b><br>
+  {f.get('description','')}
+</div>"""

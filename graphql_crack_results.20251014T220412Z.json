@@ -1,0 +1,214 @@
+{
+  "meta": {
+    "target": "https://exchange-api.bumba.global/graphql",
+    "mode": "full",
+    "started_at": "2025-10-14T22:04:07.543029Z",
+    "options": {
+      "url": "https://exchange-api.bumba.global/graphql",
+      "mode": "full",
+      "jwt_token": null,
+      "wordlist": null,
+      "threads": 4,
+      "output": null,
+      "timeout": 30,
+      "verbose": false
+    },
+    "risk_score": 25,
+    "risk_label": "LOW",
+    "finished_at": "2025-10-14T22:04:12.204258Z"
+  },
+  "discovered_endpoints": [
+    "https://exchange-api.bumba.global/internal/graphql",
+    "https://exchange-api.bumba.global/public/graphql",
+    "https://exchange-api.bumba.global/v1/graphql",
+    "https://exchange-api.bumba.global/graphql/playground",
+    "https://exchange-api.bumba.global/graphql/endpoint",
+    "https://exchange-api.bumba.global/graphql-api",
+    "https://exchange-api.bumba.global/graphql-service",
+    "https://exchange-api.bumba.global/graphql",
+    "https://exchange-api.bumba.global/v2/graphql",
+    "https://exchange-api.bumba.global/core/graphql",
+    "https://exchange-api.bumba.global/api/graphql",
+    "https://exchange-api.bumba.global/graphql/query",
+    "https://exchange-api.bumba.global/graphql/console",
+    "https://exchange-api.bumba.global/graphql/explorer",
+    "https://exchange-api.bumba.global/private/graphql",
+    "https://exchange-api.bumba.global/admin/graphql",
+    "https://exchange-api.bumba.global/backend/graphql"
+  ],
+  "schema_analysis": {},
+  "jwt_analysis": {},
+  "auth_bypass_tests": {
+    "basic_bypass": {
+      "null_token": {
+        "success": false,
+        "technique": "Null token"
+      },
+      "empty_token": {
+        "success": false,
+        "technique": "Empty token"
+      },
+      "no_header": {
+        "success": false,
+        "technique": "No Authorization header"
+      }
+    },
+    "aliasing": {
+      "field_aliasing": {
+        "success": false,
+        "technique": "Field aliasing"
+      },
+      "operation_aliasing": {
+        "success": false,
+        "technique": "Operation aliasing"
+      }
+    },
+    "batch_ops": {
+      "batch_queries": {
+        "success": false,
+        "technique": "Batch queries"
+      },
+      "batch_mutations": {
+        "success": false,
+        "technique": "Batch mutations"
+      }
+    },
+    "introspection_bypass": {
+      "attempt_0": {
+        "success": false
+      },
+      "attempt_1": {
+        "success": false
+      },
+      "attempt_2": {
+        "success": false
+      }
+    }
+  },
+  "enumerated_schema": {
+    "queries": {
+      "users": {
+        "confidence": 70
+      },
+      "user": {
+        "confidence": 70
+      },
+      "permissions": {
+        "confidence": 70
+      }
+    },
+    "mutations": {},
+    "subscriptions": {},
+    "types": {},
+    "relationships": {},
+    "sensitive_operations": [
+      {
+        "operation": "users",
+        "risk": "info_disclosure",
+        "severity": "MEDIUM"
+      },
+      {
+        "operation": "user",
+        "risk": "info_disclosure",
+        "severity": "MEDIUM"
+      }
+    ]
+  },
+  "vulnerabilities": [
+    {
+      "type": "schema_info_disclosure",
+      "severity": "MEDIUM",
+      "description": "Sensitive operation: users",
+      "exploitability": "moderate",
+      "exposure": "public",
+      "confidence": 0.6,
+      "risk_score": 25,
+      "risk_label": "LOW",
+      "computed_risk_details": {
+        "base": 40,
+        "exploitability": 0.7,
+        "exposure": 1.5,
+        "confidence_factor": 0.6,
+        "raw": 25.2
+      }
+    },
+    {
+      "type": "schema_info_disclosure",
+      "severity": "MEDIUM",
+      "description": "Sensitive operation: user",
+      "exploitability": "moderate",
+      "exposure": "public",
+      "confidence": 0.6,
+      "risk_score": 25,
+      "risk_label": "LOW",
+      "computed_risk_details": {
+        "base": 40,
+        "exploitability": 0.7,
+        "exposure": 1.5,
+        "confidence_factor": 0.6,
+        "raw": 25.2
+      }
+    }
+  ],
+  "findings": [],
+  "errors": [],
+  "auth_operations": [
+    {
+      "type": "endpoint_test",
+      "status": "working",
+      "sample": {
+        "data": {
+          "__typename": "Query"
+        }
+      }
+    },
+    {
+      "query": "query { __typename }",
+      "status": 200,
+      "has_data": true,
+      "has_errors": false
+    },
+    {
+      "query": "query { viewer { id } }",
+      "status": 400,
+      "has_data": false,
+      "has_errors": true
+    },
+    {
+      "query": "query { me { id } }",
+      "status": 400,
+      "has_data": false,
+      "has_errors": true
+    },
+    {
+      "query": "query { currentUser { id } }",
+      "status": 400,
+      "has_data": false,
+      "has_errors": true
+    },
+    {
+      "query": "query { user { id } }",
+      "status": 400,
+      "has_data": false,
+      "has_errors": true
+    },
+    {
+      "query": "mutation { login(input: {username: \"test\", password: \"test\"}) { token } }",
+      "status": 400,
+      "has_data": false,
+      "has_errors": true
+    },
+    {
+      "query": "mutation { auth(input: {username: \"test\", password: \"test\"}) { token } }",
+      "status": 400,
+      "has_data": false,
+      "has_errors": true
+    },
+    {
+      "query": "mutation { authenticate(input: {credentials: \"test\"}) { jwt } }",
+      "status": 400,
+      "has_data": false,
+      "has_errors": true
+    }
+  ]
+}

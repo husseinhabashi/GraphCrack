@@ -1,131 +1,167 @@
 #!/usr/bin/env python3
 """
-GraphQL Field Enumeration Module
-Discovers fields and operations through various techniques
+GraphQL Field Enumeration Engine v2
+Author: Hussein Habashi Style ⚔️
 """
 
 import aiohttp
 import asyncio
-import re
 import json
-from typing import List, Dict, Any, Set
+import re
+from typing import Dict, Any, List, Set
 
 class FieldEnumerator:
-    def __init__(self, endpoint_url: str):
-        self.endpoint_url = endpoint_url
+    def __init__(self, endpoint_url: str, wordlist: str = None, verbose: bool = True):
+        self.endpoint_url = endpoint_url.rstrip("/")
+        self.wordlist = wordlist
+        self.verbose = verbose
         self.session = None
-        self.discovered_fields = {
-            'queries': set(),
-            'mutations': set(),
-            'subscriptions': set(),
-            'types': set(),
-            'fields_by_type': {}
+        self.discovered = {
+            "queries": {},
+            "mutations": {},
+            "subscriptions": {},
+            "types": {},
+            "fields_by_type": {}
         }
-        
+
     async def enumerate_fields(self) -> Dict[str, Any]:
-        """Comprehensive field enumeration using multiple techniques"""
-        print("Enumerating GraphQL fields and operations...")
-        
+        print("[*] Starting comprehensive field enumeration...")
+
         async with aiohttp.ClientSession() as session:
             self.session = session
-            
-            # Multiple enumeration techniques
+
             techniques = [
                 self._introspection_enumeration(),
-                self._field_suggestion_enumeration(),
+                self._error_leak_enumeration(),
+                self._field_spray_enumeration()
             ]
-            
+
             results = await asyncio.gather(*techniques, return_exceptions=True)
-            
-            # Combine results from all techniques
+
             for result in results:
-                if result and not isinstance(result, Exception):
-                    self._merge_discoveries(result)
-            
-            return {
-                'queries': list(self.discovered_fields['queries']),
-                'mutations': list(self.discovered_fields['mutations']),
-                'subscriptions': list(self.discovered_fields['subscriptions']),
-                'types': list(self.discovered_fields['types']),
-                'fields_by_type': self.discovered_fields['fields_by_type']
-            }
-    
+                if result and isinstance(result, dict):
+                    self._merge_results(result)
+
+        return self.discovered
+
+    # ================================================================
+    # 🧬 Technique 1: Full or Partial Introspection Enumeration
+    # ================================================================
     async def _introspection_enumeration(self) -> Dict[str, Any]:
-        """Enumerate fields using introspection"""
-        discoveries = {
-            'queries': set(),
-            'mutations': set(),
-            'subscriptions': set(),
-            'types': set(),
-            'fields_by_type': {}
-        }
-        
+        discoveries = self._empty_discovery()
         try:
-            from core.recon.introspection import IntrospectionAnalyzer
-            analyzer = IntrospectionAnalyzer(self.endpoint_url)
-            introspection_data = await analyzer.get_introspection()
-            
-            if introspection_data and '__schema' in introspection_data:
-                schema = introspection_data['__schema']
-                
-                # Extract queries
-                if schema.get('queryType'):
-                    query_fields = schema['queryType'].get('fields', [])
-                    for field in query_fields:
-                        discoveries['queries'].add(field['name'])
-                
-                # Extract mutations
-                if schema.get('mutationType'):
-                    mutation_fields = schema['mutationType'].get('fields', [])
-                    for field in mutation_fields:
-                        discoveries['mutations'].add(field['name'])
-                        
-        except Exception as e:
-            print(f"Introspection enumeration failed: {e}")
-        
+            introspection_query = {"query": "query { __schema { types { name fields { name } } } }"}
+            async with self.session.post(self.endpoint_url, json=introspection_query, timeout=20) as r:
+                if r.status == 200:
+                    data = await r.json()
+                    types = data.get("data", {}).get("__schema", {}).get("types", [])
+                    for t in types:
+                        t_name = t.get("name")
+                        fields = t.get("fields", [])
+                        discoveries["types"][t_name] = {"confidence": 100}
+                        for f in fields:
+                            fname = f.get("name")
+                            discoveries["fields_by_type"].setdefault(t_name, []).append(fname)
+                            # classify queries vs mutations
+                            if "query" in t_name.lower():
+                                discoveries["queries"][fname] = {"confidence": 100}
+                            if "mutation" in t_name.lower():
+                                discoveries["mutations"][fname] = {"confidence": 100}
+        except Exception:
+            pass
         return discoveries
-    
-    async def _field_suggestion_enumeration(self) -> Dict[str, Any]:
-        """Enumerate fields using field suggestion attacks"""
-        discoveries = {
-            'queries': set(),
-            'mutations': set(),
-            'subscriptions': set(),
-            'types': set(),
-            'fields_by_type': {}
-        }
-        
-        # Common field names to try
-        common_fields = [
-            # Query fields
-            'users', 'user', 'posts', 'post', 'products', 'product',
-            'customers', 'customer', 'orders', 'order', 'settings',
-            'config', 'profile', 'me', 'currentUser', 'admin',
-            'markets', 'currencies', 'trades', 'balance'
+
+    # ================================================================
+    # 🧪 Technique 2: Error-Leak Enumeration (when introspection disabled)
+    # ================================================================
+    async def _error_leak_enumeration(self) -> Dict[str, Any]:
+        discoveries = self._empty_discovery()
+        test_field = "idontexist"
+        payload = {"query": f"query {{ {test_field} }}"}
+
+        try:
+            async with self.session.post(self.endpoint_url, json=payload, timeout=10) as r:
+                text = await r.text()
+                matches = re.findall(r'Cannot query field "(.*?)"', text)
+                for m in matches:
+                    discoveries["queries"][m] = {"confidence": 50}
+        except:
+            pass
+        return discoveries
+
+    # ================================================================
+    # 🔥 Technique 3: Field Spray Enumeration (brute-force)
+    # ================================================================
+    async def _field_spray_enumeration(self) -> Dict[str, Any]:
+        discoveries = self._empty_discovery()
+        candidates = self._load_common_fields()
+
+        tasks = []
+        for field in candidates:
+            tasks.append(self._test_field(field))
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for field, result in zip(candidates, results):
+            if result:
+                discoveries["queries"][field] = {"confidence": 70}
+
+        return discoveries
+
+    async def _test_field(self, field):
+        payload = {"query": f"query {{ {field} {{ __typename }} }}"}
+        try:
+            async with self.session.post(self.endpoint_url, json=payload, timeout=6) as r:
+                data = await r.text()
+                return '"data"' in data or "Cannot query field" not in data
+        except:
+            return False
+
+    # ================================================================
+    # 🧰 Helpers
+    # ================================================================
+    def _load_common_fields(self) -> List[str]:
+        base_fields = [
+            "user", "users", "post", "posts", "me", "profile", "admin",
+            "account", "orders", "settings", "config", "currentUser",
+            "organization", "team", "members", "customers", "sessions",
+            "auth", "verify", "resetPassword", "refreshToken"
         ]
-        
-        for field in common_fields:
-            # Test as query
-            query_test = {"query": f"query {{ {field} {{ id }} }}"}
+        if self.wordlist:
             try:
-                async with self.session.post(self.endpoint_url, json=query_test, timeout=5) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        if 'data' in data and data['data'] is not None:
-                            discoveries['queries'].add(field)
+                with open(self.wordlist) as f:
+                    base_fields.extend([line.strip() for line in f if line.strip()])
             except:
                 pass
-        
-        return discoveries
-    
-    def _merge_discoveries(self, new_discoveries: Dict[str, Any]):
-        """Merge new discoveries into main discovery set"""
-        for key in ['queries', 'mutations', 'subscriptions', 'types']:
-            if key in new_discoveries:
-                self.discovered_fields[key].update(new_discoveries[key])
-        
-        if 'fields_by_type' in new_discoveries:
-            for type_name, fields in new_discoveries['fields_by_type'].items():
-                if type_name not in self.discovered_fields['fields_by_type']:
-                    self.discovered_fields['fields_by_type'][type_name] = set()
-                self.discovered_fields['fields_by_type'][type_name].update(fields)
+        return list(set(base_fields))
+
+    def _empty_discovery(self) -> Dict[str, Any]:
+        return {
+            "queries": {},
+            "mutations": {},
+            "subscriptions": {},
+            "types": {},
+            "fields_by_type": {}
+        }
+
+    def _merge_results(self, new: Dict[str, Any]):
+        for category in self.discovered:
+            if category == "fields_by_type":
+                for t, fields in new.get("fields_by_type", {}).items():
+                    self.discovered["fields_by_type"].setdefault(t, [])
+                    self.discovered["fields_by_type"][t].extend(fields)
+            else:
+                self.discovered[category].update(new.get(category, {}))
+
+
+# 🧪 CLI usage
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) < 2:
+        print("Usage: python3 graphql_enum.py <endpoint_url> [wordlist.txt]")
+        sys.exit(1)
+
+    url = sys.argv[1]
+    wordlist = sys.argv[2] if len(sys.argv) == 3 else None
+    enumerator = FieldEnumerator(url, wordlist=wordlist)
+    result = asyncio.run(enumerator.enumerate_fields())
+    print(json.dumps(result, indent=2))
